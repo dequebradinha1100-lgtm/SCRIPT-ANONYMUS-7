@@ -1,4 +1,4 @@
--- ====================================================================
+scriptempausapormotivosconfidenfiais-- ====================================================================
 -- INICIALIZAÇÃO DA BIBLIOTECA E SERVIÇOS
 -- ====================================================================
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
