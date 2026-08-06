@@ -1,3 +1,57 @@
+-- ====================================================================
+-- INICIALIZAÇÃO DA BIBLIOTECA E SERVIÇOS
+-- ====================================================================
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+
+-- ====================================================================
+-- TABELA DE MÓDULOS DE ESTADO
+-- ====================================================================
+local Modules = {
+    Connections = {},
+    OriginalSizes = {},
+    Hitbox = { Enabled = false, Size = 2, Color = Color3.fromRGB(255,0,0), Transparency = 0.5 },
+    Player = {
+        WalkSpeed = 16, JumpPower = 50, InfJump = false, Noclip = false,
+        AutoStand = false, NoPlayerCollision = false,
+        Notifications = true, AutoSprint = false,
+        Gravity = 196.2, Scale = 1
+    },
+    ESP = {
+        Enabled = false, Box = false, Skeleton = false, Health = false,
+        Tracers = false, Names = false, TeamCheck = false, Items = false,
+        Chams = false
+    },
+    Trolls = {
+        Spin = false, SpinSpeed = 30, SelectedTarget = "",
+        LoopTP = false, HeadSit = false, Invisible = false,
+        Freeze = false
+    },
+    Defense = {
+        GodMode = false, AutoHeal = false, HealThreshold = 50,
+        NoFallDamage = false
+    },
+    Auto = {
+        Farm = false, FarmTarget = "Coin", MacroRecording = false,
+        MacroSequence = {}, MacroPlaying = false
+    },
+    Visual = { FOV = 70 },
+    Waypoints = { SavedPosition = nil }
+}
+
+-- ====================================================================
+-- FUNÇÕES AUXILIARES E UTILITÁRIAS
+-- ====================================================================
+local function Notify(title, content, duration)
     if Modules.Player.Notifications then
         Rayfield:Notify({
             Title = title,
@@ -48,20 +102,35 @@ Modules.Connections.InfJump = UserInputService.JumpRequest:Connect(function()
     end
 end)
 
--- Anti-AFK
-local idledConn = LocalPlayer.Idled:Connect(function()
-    if Modules.Player.AntiAFK then
-        VirtualInput:SendKeyEvent(true, Enum.KeyCode.Unknown, false, game)
-        task.wait(0.2)
-        VirtualInput:SendKeyEvent(false, Enum.KeyCode.Unknown, false, game)
-    end
-end)
-table.insert(Modules.Connections, idledConn)
+-- Sistema Robusto de God Mode Baseado em Eventos
+local function SetupGodMode(char)
+    local humanoid = char:WaitForChild("Humanoid", 5)
+    if not humanoid then return end
+
+    humanoid.HealthChanged:Connect(function(health)
+        if Modules.Defense.GodMode and health < humanoid.MaxHealth then
+            humanoid.Health = humanoid.MaxHealth
+        end
+    end)
+
+    humanoid.StateChanged:Connect(function(_, newState)
+        if Modules.Defense.GodMode and newState == Enum.HumanoidStateType.Dead then
+            humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+            humanoid.Health = humanoid.MaxHealth
+        end
+    end)
+end
+
+if LocalPlayer.Character then
+    SetupGodMode(LocalPlayer.Character)
+end
+LocalPlayer.CharacterAdded:Connect(SetupGodMode)
 
 -- Loop Principal RenderStepped / Stepped
 RunService.Stepped:Connect(function()
     local char = LocalPlayer.Character
     if not char then return end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
 
     -- Noclip
     if Modules.Player.Noclip then
@@ -74,9 +143,16 @@ RunService.Stepped:Connect(function()
 
     -- AutoStand
     if Modules.Player.AutoStand then
-        local humanoid = char:FindFirstChildOfClass("Humanoid")
         if humanoid and humanoid:GetState() == Enum.HumanoidStateType.Physics then
             humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+        end
+    end
+
+    -- Proteção contra Dano de Queda e Estados Críticos por Movimento Rápido
+    if Modules.Defense.NoFallDamage and humanoid then
+        local state = humanoid:GetState()
+        if state == Enum.HumanoidStateType.FallingDown or state == Enum.HumanoidStateType.Ragdoll then
+            humanoid:ChangeState(Enum.HumanoidStateType.Running)
         end
     end
 end)
@@ -105,14 +181,17 @@ RunService.RenderStepped:Connect(function()
         root.CFrame = root.CFrame * CFrame.Angles(0, math.rad(Modules.Trolls.SpinSpeed), 0)
     end
 
-    -- Target Loop Teleport
+    -- Target Loop Teleport & Head Sit
     if Modules.Trolls.SelectedTarget ~= "" then
         local targetPlayer = Players:FindFirstChild(Modules.Trolls.SelectedTarget)
         if targetPlayer and targetPlayer.Character then
             local targetRoot = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+            local targetHead = targetPlayer.Character:FindFirstChild("Head")
 
             if Modules.Trolls.LoopTP and root and targetRoot then
                 root.CFrame = targetRoot.CFrame * CFrame.new(0, 0, 3)
+            elseif Modules.Trolls.HeadSit and root and targetHead then
+                root.CFrame = targetHead.CFrame * CFrame.new(0, 1.5, 0)
             end
         end
     end
@@ -141,6 +220,23 @@ task.spawn(function()
                             hrp.Transparency = Modules.OriginalSizes[player].Transparency
                         end
                     end
+                end
+            end
+        end
+    end
+end)
+
+-- Auto Heal Loop
+task.spawn(function()
+    while task.wait(1) do
+        if Modules.Defense.AutoHeal then
+            local char = LocalPlayer.Character
+            local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+            if humanoid and humanoid.Health < Modules.Defense.HealThreshold then
+                local tool = LocalPlayer.Backpack:FindFirstChild("Medkit") or char:FindFirstChild("Medkit")
+                if tool then
+                    tool.Parent = char
+                    tool:Activate()
                 end
             end
         end
@@ -182,18 +278,27 @@ for _, p in ipairs(Players:GetPlayers()) do ApplyESP(p) end
 Players.PlayerAdded:Connect(ApplyESP)
 
 -- ====================================================================
--- CRIAÇÃO DA INTERFACE RAYFIELD
+-- CRIAÇÃO DA INTERFACE RAYFIELD (SISTEMA DE KEY NATIVO)
 -- ====================================================================
 local Window = Rayfield:CreateWindow({
-    Name = "torcidas 7",
+    Name = "Torcidas 7",
     LoadingTitle = "Carregando Framework Módulo...",
     LoadingSubtitle = "by Assistant",
     ConfigurationSaving = { Enabled = false },
-    KeySystem = false
+    KeySystem = true,
+    KeySettings = {
+        Title = "Torcidas 7 | Key System",
+        Subtitle = "Verificação de Chave",
+        Note = "Pegue sua Key no Discord: https://discord.gg/JS8WDGbus",
+        FileName = "Torcidas7KeyConfig",
+        SaveKey = true,
+        GrabKeyFromSite = false,
+        Key = {"SCRIPT7VIP"}
+    }
 })
 
 -- --------------------------------------------------------------------
--- TAB 1: COMBAT (Hitbox)
+-- TAB 1: COMBAT (Antiga Hitbox)
 -- --------------------------------------------------------------------
 local CombatTab = Window:CreateTab("Combat", 4483362458)
 
@@ -205,7 +310,7 @@ CombatTab:CreateToggle({
 
 CombatTab:CreateSlider({
     Name = "Tamanho da Hitbox",
-    Range = {2, 12},
+    Range = {2, 50},
     Increment = 1,
     CurrentValue = 2,
     Callback = function(Value) Modules.Hitbox.Size = Value end
@@ -264,21 +369,30 @@ PlayerTab:CreateToggle({
     Callback = function(Value) Modules.Player.AutoSprint = Value end
 })
 
-PlayerTab:CreateToggle({
-    Name = "Anti-AFK",
-    CurrentValue = false,
-    Callback = function(Value) 
-        Modules.Player.AntiAFK = Value 
-        Notify("Anti-AFK", Value and "Ativado com sucesso" or "Desativado", 2)
-    end
-})
-
 PlayerTab:CreateSlider({
     Name = "Gravidade",
     Range = {0, 500},
     Increment = 5,
     CurrentValue = 196,
     Callback = function(Value) Modules.Player.Gravity = Value end
+})
+
+PlayerTab:CreateToggle({
+    Name = "God Mode",
+    CurrentValue = false,
+    Callback = function(Value)
+        Modules.Defense.GodMode = Value
+        Notify("Proteção", Value and "God Mode Ativado" or "God Mode Desativado", 2)
+    end
+})
+
+PlayerTab:CreateToggle({
+    Name = "Sem Dano de Queda",
+    CurrentValue = false,
+    Callback = function(Value)
+        Modules.Defense.NoFallDamage = Value
+        Notify("Proteção", Value and "Sem Dano de Queda Ativado" or "Sem Dano de Queda Desativado", 2)
+    end
 })
 
 -- --------------------------------------------------------------------
@@ -349,10 +463,30 @@ TrollTab:CreateToggle({
     Callback = function(Value) Modules.Trolls.LoopTP = Value end
 })
 
+TrollTab:CreateToggle({
+    Name = "Sentar na Cabeça do Alvo",
+    CurrentValue = false,
+    Callback = function(Value) Modules.Trolls.HeadSit = Value end
+})
+
 -- --------------------------------------------------------------------
--- TAB 5: WAYPOINTS
+-- TAB 5: DEFENSE & WAYPOINTS
 -- --------------------------------------------------------------------
-local DefenseTab = Window:CreateTab("Teleport", 4483362458)
+local DefenseTab = Window:CreateTab("Defesa / Teleport", 4483362458)
+
+DefenseTab:CreateToggle({
+    Name = "Auto Cura",
+    CurrentValue = false,
+    Callback = function(Value) Modules.Defense.AutoHeal = Value end
+})
+
+DefenseTab:CreateSlider({
+    Name = "Limite de Vida para Curar (%)",
+    Range = {10, 90},
+    Increment = 5,
+    CurrentValue = 50,
+    Callback = function(Value) Modules.Defense.HealThreshold = Value end
+})
 
 DefenseTab:CreateButton({
     Name = "Salvar Posição Atual",
@@ -388,5 +522,37 @@ VisualTab:CreateSlider({
     Range = {30, 120},
     Increment = 1,
     CurrentValue = 70,
-    Callback = function(Value) Modules.Visual.F
+    Callback = function(Value) Modules.Visual.FOV = Value end
+})
 
+-- --------------------------------------------------------------------
+-- TAB 7: SETTINGS
+-- --------------------------------------------------------------------
+local SettingsTab = Window:CreateTab("Settings", 4483362458)
+
+SettingsTab:CreateToggle({
+    Name = "Notificações",
+    CurrentValue = Modules.Player.Notifications,
+    Callback = function(Value) Modules.Player.Notifications = Value end
+})
+
+SettingsTab:CreateButton({
+    Name = "Recarregar Interface",
+    Callback = function()
+        Notify("Settings", "Interface recarregada com sucesso!", 2)
+    end
+})
+
+SettingsTab:CreateButton({
+    Name = "Destruir Menu",
+    Callback = function()
+        Rayfield:Destroy()
+    end
+})
+
+SettingsTab:CreateParagraph({
+    Title = "Informações",
+    Content = "Nome do Hub: Torcidas 7\nVersão: Atual\nCréditos: Assistant"
+})
+
+Notify("Torcidas 7", "Script carregado e executado com sucesso!", 4)
