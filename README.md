@@ -1,55 +1,3 @@
--- ====================================================================
--- INICIALIZAÇÃO DA BIBLIOTECA E SERVIÇOS
--- ====================================================================
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local Workspace = game:GetService("Workspace")
-local TeleportService = game:GetService("TeleportService")
-local HttpService = game:GetService("HttpService")
-local VirtualInput = game:GetService("VirtualInputManager")
-
-local LocalPlayer = Players.LocalPlayer
-local Camera = Workspace.CurrentCamera
-
--- ====================================================================
--- TABELA DE MÓDULOS DE ESTADO
--- ====================================================================
-local Modules = {
-    Connections = {},
-    OriginalSizes = {},
-    Hitbox = { Enabled = false, Size = 2, Color = Color3.fromRGB(255,0,0), Transparency = 0.5 },
-    Player = {
-        WalkSpeed = 16, JumpPower = 50, InfJump = false, Noclip = false,
-        AutoStand = false, NoPlayerCollision = false,
-        Notifications = true, AntiAFK = false, AutoSprint = false,
-        Gravity = 196.2, Scale = 1
-    },
-    ESP = {
-        Enabled = false, Box = false, Skeleton = false, Health = false,
-        Tracers = false, Names = false, TeamCheck = false, Items = false,
-        Chams = false
-    },
-    Trolls = {
-        Spin = false, SpinSpeed = 30, SelectedTarget = "",
-        LoopTP = false, Invisible = false,
-        Freeze = false
-    },
-    Defense = {},
-    Auto = {
-        Farm = false, FarmTarget = "Coin", MacroRecording = false,
-        MacroSequence = {}, MacroPlaying = false
-    },
-    Visual = { FOV = 70 },
-    Waypoints = { SavedPosition = nil }
-}
-
--- ====================================================================
--- FUNÇÕES AUXILIARES E UTILITÁRIAS
--- ====================================================================
-local function Notify(title, content, duration)
     if Modules.Player.Notifications then
         Rayfield:Notify({
             Title = title,
@@ -440,8 +388,5 @@ VisualTab:CreateSlider({
     Range = {30, 120},
     Increment = 1,
     CurrentValue = 70,
-    Callback = function(Value) Modules.Visual.FOV = Value end
-})
-
-Notify("torcidas 7", "Script atualizado e carregado com sucesso!", 4)
+    Callback = function(Value) Modules.Visual.F
 
